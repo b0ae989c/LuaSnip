@@ -603,6 +603,14 @@ function Node:set_text(text)
 	end
 end
 
+-- returns the smallest node at pos, immediately inside this snippet.
+-- precondition is that pos is located within this node's region.
+-- if there is no smaller node than node itself, return self.
+function Node:node_at(_)
+	-- default-implementation: node is leaf (text,insert,functionNode).
+	return self
+end
+
 return {
 	Node = Node,
 	focus_node = focus_node,

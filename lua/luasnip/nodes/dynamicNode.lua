@@ -419,6 +419,10 @@ function DynamicNode:subtree_set_rgrav(rgrav)
 	end
 end
 
+function DynamicNode:node_at(pos)
+	return self.snip:node_at(pos)
+end
+
 return {
 	D = D,
 }

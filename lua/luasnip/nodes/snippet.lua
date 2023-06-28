@@ -1209,6 +1209,31 @@ function Snippet:subtree_set_rgrav(rgrav)
 	end
 end
 
+-- traverses this snippet, and finds the smallest node containing pos.
+-- pos-column has to be a byte-index, not a display-column.
+function Snippet:smallest_node_at(pos)
+	local self_from, self_to = self.mark:pos_begin_end_raw()
+	assert(util.pos_cmp(self_from, pos) <= 0 and util.pos_cmp(pos, self_to) <= 0, "pos is not inside the snippet.")
+
+	local smallest_node = self:node_at(pos)
+	assert(smallest_node ~= nil, "could not find a smallest node (very unexpected)")
+
+	return smallest_node
+end
+
+function Snippet:node_at(pos)
+	if #self.nodes == 0 then
+		-- special case: no children (can naturally occur with dynamicNode,
+		-- when its function could not be evaluated).
+		return self
+	end
+
+	local found_node = node_util.binarysearch_pos(self.nodes, pos, true)
+	assert(found_node ~= nil, "could not find node in snippet")
+
+	return found_node:node_at(pos)
+end
+
 return {
 	Snippet = Snippet,
 	S = S,

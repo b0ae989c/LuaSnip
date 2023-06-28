@@ -418,6 +418,10 @@ function ChoiceNode:subtree_set_rgrav(rgrav)
 	end
 end
 
+function ChoiceNode:node_at(pos)
+	return self.active_choice:node_at(pos)
+end
+
 return {
 	C = C,
 }

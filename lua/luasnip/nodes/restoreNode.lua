@@ -292,6 +292,10 @@ function RestoreNode:subtree_set_rgrav(rgrav)
 	end
 end
 
+function RestoreNode:node_at(pos)
+	return self.snip:node_at(pos)
+end
+
 return {
 	R = R,
 }
