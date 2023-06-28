@@ -147,6 +147,101 @@ local function wrap_context(context)
 	end
 end
 
+local cmp_functions = {
+	rgrav_less = function(pos, range_from)
+		return util.pos_cmp(pos, range_from) < 0
+	end,
+	rgrav_greater = function(pos, range_to)
+		return util.pos_cmp(pos, range_to) >= 0
+	end,
+	boundary_outside_less = function(pos, range_from)
+		return util.pos_cmp(pos, range_from) <= 0
+	end,
+	boundary_outside_greater = function(pos, range_to)
+		return util.pos_cmp(pos, range_to) >= 0
+	end
+}
+-- `nodes` is a list of nodes ordered by their occurrence in the buffer.
+-- `pos` is a row-column-tuble, byte-columns, and we return the node the LEFT
+-- EDGE(/side) of `pos` is inside.
+-- This convention is chosen since a snippet inserted at `pos` will move the
+-- character at `pos` to the right.
+-- The exact meaning of "inside" can be influenced with `respect_rgravs`:
+-- * if it is true, "inside" is replicated to match the shifting-behaviour of
+--   extmarks:
+--   First of all, we compare the left edge of `pos` with the left/right edges
+--   of from/to, depending on rgrav.
+--   If the left edge is <= left/right edge of from, and < left/right edge of
+--   to, `pos` is inside the node.
+--
+-- * if it is false, pos has to be fully inside a node to be considered inside
+--   it. If pos is on the left endpoint, it is considered to be left of the
+--   node, and likewise for the right endpoint.
+-- 
+-- This differentiation is useful for making this function more general:
+-- When searching in the contiguous nodes of a snippet, we'd like this routine
+-- to return any of them (obviously the one pos is inside/or on the border of),
+-- but in no case fail.
+-- However! when searching the top-level snippets with the intention of finding
+-- the snippet/node a new snippet should be expanded inside, it seems better to
+-- shift an existing snippet to the right/left than expand the new snippet
+-- inside it (when the expand-point is on the boundary).
+local function binarysearch_pos(nodes, pos, respect_rgravs)
+	local left = 1
+	local right = #nodes
+
+	local less, greater
+	if respect_rgravs then
+		less = cmp_functions.rgrav_less
+		greater = cmp_functions.rgrav_greater
+	else
+		less = cmp_functions.boundary_outside_less
+		greater = cmp_functions.boundary_outside_greater
+	end
+
+	-- actual search-routine from
+	-- https://github.com/Roblox/Wiki-Lua-Libraries/blob/master/StandardLibraries/BinarySearch.lua
+	if #nodes == 0 then
+		return nil, 1
+	end
+	while true do
+		local mid = left + math.floor((right-left)/2)
+		local mid_mark = nodes[mid].mark
+		local mid_from, mid_to = mid_mark:pos_begin_end_raw()
+
+		if respect_rgravs then
+			-- if rgrav is set on either endpoint, the node considers its
+			-- endpoint to be the right, not the left edge.
+			-- We only want to work with left edges but since the right edge is
+			-- the left edge of the next column, this is not an issue :)
+			-- TODO: does this fail with multibyte characters???
+			if mid_mark:get_rgrav(-1) then
+				mid_from[2] = mid_from[2] + 1
+			end
+			if mid_mark:get_rgrav(1) then
+				mid_to[2] = mid_to[2] + 1
+			end
+		end
+		if greater(pos, mid_to) then
+			-- make sure right-left becomes smaller.
+			left = mid + 1
+			if left > right then
+				return nil, mid + 1
+			end
+		elseif less(pos, mid_from) then
+			-- continue search on left side
+			right = mid - 1
+			if left > right then
+				return nil, mid
+			end
+		else
+			-- greater-equal than mid_from, smaller or equal to mid_to => left edge
+			-- of pos is inside nodes[mid] :)
+			return nodes[mid], mid
+		end
+	end
+end
+
 return {
 	subsnip_init_children = subsnip_init_children,
 	init_child_positions_func = init_child_positions_func,
@@ -160,4 +255,5 @@ return {
 	print_dict = print_dict,
 	init_node_opts = init_node_opts,
 	snippet_extend_context = snippet_extend_context,
+	binarysearch_pos = binarysearch_pos,
 }
