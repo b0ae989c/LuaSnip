@@ -316,6 +316,10 @@ local function _S(snip, nodes, opts)
 			-- * `update_dependents` can be called to find all dependents, and
 			--   update the visible ones.
 			dependents_dict = dict.new(),
+
+			-- list of snippets expanded within the region of this snippet.
+			-- sorted by their buffer-position, for quick searching.
+			child_snippets = {}
 		}),
 		opts
 	)
@@ -323,8 +327,14 @@ local function _S(snip, nodes, opts)
 	-- is propagated to all subsnippets, used to quickly find the outer snippet
 	snip.snippet = snip
 
-	-- the snippet may not have dependents.
-	snip._update_dependents = function() end
+	-- if the snippet is expanded inside another snippet (can be recognized by
+	-- non-nil parent_node), the node of the snippet this one is inside has to
+	-- update its dependents.
+	function snip:_update_dependents()
+		if self.parent_node then
+			self.parent_node:update_dependents()
+		end
+	end
 	snip.update_dependents = snip._update_dependents
 
 	snip:init_nodes()
@@ -471,54 +481,108 @@ function Snippet:remove_from_jumplist()
 	end
 end
 
-local function insert_into_jumplist(snippet, start_node, current_node)
-	if current_node then
-		-- currently at the endpoint (i(0)) of another snippet, this snippet
-		-- is inserted _behind_ that snippet.
-		if current_node.pos == 0 then
-			if current_node.next then
-				if current_node.next.pos == -1 then
-					-- next is beginning of another snippet, this snippet is
-					-- inserted before that one.
-					current_node.next.prev = snippet.insert_nodes[0]
-				else
-					-- next is outer insertNode.
-					current_node.next.inner_last = snippet.insert_nodes[0]
-				end
-			end
-			snippet.insert_nodes[0].next = current_node.next
-			current_node.next = start_node
-			start_node.prev = current_node
-		elseif current_node.pos == -1 then
-			if current_node.prev then
-				if current_node.prev.pos == 0 then
-					current_node.prev.next = start_node
-				else
-					current_node.prev.inner_first = snippet
-				end
-			end
-			snippet.insert_nodes[0].next = current_node
-			start_node.prev = current_node.prev
-			current_node.prev = snippet.insert_nodes[0]
-		else
-			snippet.insert_nodes[0].next = current_node
-			-- jump into snippet directly.
-			current_node.inner_first = snippet
-			current_node.inner_last = snippet.insert_nodes[0]
-			start_node.prev = current_node
-		end
+local function insert_into_jumplist(snippet, start_node, current_node, parent_node, sibling_snippets, own_indx)
+	local prev_snippet = sibling_snippets[own_indx-1]
+	-- have not yet inserted self!!
+	local next_snippet = sibling_snippets[own_indx]
+
+	-- only consider sibling-snippets with the same parent-node as
+	-- previous/next snippet for linking-purposes.
+	-- They are siblings because they are expanded in the same snippet, not
+	-- because they have the same parent_node.
+	local prev, next
+	if prev_snippet ~= nil and prev_snippet.parent_node == parent_node then
+		prev = prev_snippet
+	end
+	if next_snippet ~= nil and next_snippet.parent_node == parent_node then
+		next = next_snippet
 	end
 
-	-- snippet is between i(-1)(startNode) and i(0).
-	snippet.next = snippet.insert_nodes[0]
-	snippet.prev = start_node
+	if parent_node then
+		local can_link_parent_node = vim.tbl_contains({types.insertNode, types.snippetNode}, rawget(parent_node, "type"))
+		-- snippetNode (which has to be empty to be viable here) and
+		-- insertNode can both deal with inserting a snippet inside them
+		-- (ie. hooking it up st. it can be visited after jumping back to
+		-- the snippet of parent).
+		-- in all cases
+		if prev ~= nil then
+			-- if we have a previous snippet we can link to, just do that.
+			prev.next.next = snippet
+			start_node.prev = prev
+		else
+			if can_link_parent_node then
+				-- prev is nil, but we can link up using the parent.
+				parent_node.inner_first = snippet
+				start_node.prev = parent_node
+			else
+				-- no way to link up, just jump back to current_node, but
+				-- don't jump from current_node to this snippet (I feel
+				-- like that should be good: one can still get back to ones
+				-- previous history, and we don't mess up whatever jumps
+				-- are set up around current_node)
+				start_node.prev = current_node
+			end
+		end
 
-	snippet.insert_nodes[0].prev = snippet
-	start_node.next = snippet
+		-- exact same reasoning here as in prev-case above, omitting comments.
+		if next ~= nil then
+			-- jump from next snippets start_node to $0.
+			next.prev.prev = snippet.insert_nodes[0]
+			-- jump from $0 to next snippet (skip its start_node)
+			snippet.insert_nodes[0].next = next
+		else
+			if can_link_parent_node then
+				parent_node.inner_last = snippet.insert_nodes[0]
+				snippet.insert_nodes[0].next = parent_node
+			else
+				snippet.insert_nodes[0].next = current_node
+			end
+		end
+	else
+		-- inserted into top-level snippet-forest, just hook up with prev, next.
+		-- prev and next have to be snippets or nil, in this case.
+		if prev ~= nil then
+			prev.next.next = snippet
+			start_node.prev = prev.insert_nodes[0]
+		end
+		if next ~= nil then
+			snippet.insert_nodes[0].next = next
+			next.prev.prev = snippet.insert_nodes[0]
+		end
+	end
+	table.insert(sibling_snippets, own_indx, snippet)
+end
+
+-- returns: * the smallest known snippet this pos is inside.
+--          * the list of other snippets inside the snippet of this smallest
+--            node
+--          * the index this snippet would be at if inserted into that list
+local function find_snippettree_position(pos)
+	local prev_parent = nil
+	local prev_parent_children = session.snippet_roots[vim.api.nvim_get_current_buf()]
+
+	while true do
+		-- `false`: if pos is on the boundary of a snippet, consider it as
+		-- outside the snippet (in other words, prefer shifting the snippet to
+		-- continuing the search inside it.)
+		local found_parent, child_indx = node_util.binarysearch_pos(prev_parent_children, pos, false)
+		if not found_parent then
+			-- prev_parent is nil if this snippet is expanded at the top-level.
+			return prev_parent, prev_parent_children, child_indx
+		else
+			prev_parent = found_parent
+			prev_parent_children = prev_parent.child_snippets
+		end
+	end
 end
 
 function Snippet:trigger_expand(current_node, pos_id, env)
 	local pos = vim.api.nvim_buf_get_extmark_by_id(0, session.ns_id, pos_id, {})
+
+	local parent_snippet, sibling_snippets, own_indx = find_snippettree_position(pos)
+	-- may be nil, ofc.
+	local parent_node = parent_snippet and parent_snippet:node_at(pos)
+
 	local pre_expand_res = self:event(events.pre_expand, { expand_pos = pos })
 		or {}
 	-- update pos, event-callback might have moved the extmark.
@@ -545,9 +609,9 @@ function Snippet:trigger_expand(current_node, pos_id, env)
 
 	local parent_ext_base_prio
 	-- if inside another snippet, increase priority accordingly.
-	-- for now do a check for .indx.
-	if current_node and (current_node.indx and current_node.indx > 1) then
-		parent_ext_base_prio = current_node.parent.ext_opts.base_prio
+	-- parent_node is only set if this snippet is expanded inside another one.
+	if parent_node then
+		parent_ext_base_prio = parent_node.parent.ext_opts.base_prio
 	else
 		parent_ext_base_prio = session.config.ext_base_prio
 	end
@@ -594,7 +658,20 @@ function Snippet:trigger_expand(current_node, pos_id, env)
 	start_node.pos = -1
 	start_node.parent = self
 
-	insert_into_jumplist(self, start_node, current_node)
+	-- hook up i0 and start_node, and then the snippet itself.
+	-- they are outside, not inside the snippet.
+	-- This should clearly be the case for start_node, but also for $0 since
+	-- jumping to $0 should make/mark the snippet non-active (for example via
+	-- extmarks)
+	start_node.next = self
+	self.prev = start_node
+	self.insert_nodes[0].prev = self
+	self.next = self.insert_nodes[0]
+
+	-- parent_node is nil if the snippet is toplevel.
+	self.parent_node = parent_node
+
+	insert_into_jumplist(self, start_node, current_node, parent_node, sibling_snippets, own_indx)
 end
 
 -- returns copy of snip if it matches, nil if not.
@@ -1224,7 +1301,7 @@ end
 function Snippet:node_at(pos)
 	if #self.nodes == 0 then
 		-- special case: no children (can naturally occur with dynamicNode,
-		-- when its function could not be evaluated).
+		-- when its function could not be evaluated, or if a user passed an empty snippetNode).
 		return self
 	end
 
