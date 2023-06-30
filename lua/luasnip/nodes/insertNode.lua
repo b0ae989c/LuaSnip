@@ -180,16 +180,7 @@ function InsertNode:jump_into(dir, no_move, dry_run)
 	if self:is_inner_active(dry_run) then
 		if dir == 1 then
 			if self.next then
-				if not dry_run then
-					self.inner_active = false
-					if not session.config.history then
-						self.inner_first = nil
-						self.inner_last = nil
-					end
-				else
-					dry_run.active[self] = false
-				end
-
+				self:input_leave_children(dry_run)
 				self:input_leave(no_move, dry_run)
 				return self.next:jump_into(dir, no_move, dry_run)
 			else
@@ -197,16 +188,7 @@ function InsertNode:jump_into(dir, no_move, dry_run)
 			end
 		else
 			if self.prev then
-				if not dry_run then
-					self.inner_active = false
-					if not session.config.history then
-						self.inner_first = nil
-						self.inner_last = nil
-					end
-				else
-					dry_run.active[self] = false
-				end
-
+				self:input_leave_children(dry_run)
 				self:input_leave(no_move, dry_run)
 				return self.prev:jump_into(dir, no_move, dry_run)
 			else
@@ -224,12 +206,7 @@ function InsertNode:jump_from(dir, no_move, dry_run)
 
 	if dir == 1 then
 		if self.inner_first then
-			if not dry_run then
-				self.inner_active = true
-			else
-				dry_run.active[self] = true
-			end
-
+			self:input_enter_children(dry_run)
 			return self.inner_first:jump_into(dir, no_move, dry_run)
 		else
 			if self.next then
@@ -243,12 +220,7 @@ function InsertNode:jump_from(dir, no_move, dry_run)
 		end
 	else
 		if self.inner_last then
-			if not dry_run then
-				self.inner_active = true
-			else
-				dry_run.active[self] = true
-			end
-
+			self:input_enter_children(dry_run)
 			return self.inner_last:jump_into(dir, no_move, dry_run)
 		else
 			if self.prev then
@@ -257,6 +229,25 @@ function InsertNode:jump_from(dir, no_move, dry_run)
 			else
 				return self
 			end
+		end
+	end
+end
+
+function InsertNode:input_enter_children(dry_run)
+	if dry_run then
+		dry_run.active[self] = true
+	else
+		self.inner_active = true
+	end
+end
+function InsertNode:input_leave_children(dry_run)
+	if dry_run then
+		dry_run.active[self] = false
+	else
+		self.inner_active = false
+		if not session.config.history then
+			self.inner_first = nil
+			self.inner_last = nil
 		end
 	end
 end

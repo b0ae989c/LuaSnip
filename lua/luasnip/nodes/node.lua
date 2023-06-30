@@ -178,6 +178,8 @@ function Node:input_leave(_, dry_run)
 
 	self.mark:update_opts(self:get_passive_ext_opts())
 end
+function Node:input_leave_children() end
+function Node:input_enter_children() end
 
 local function find_dependents(self, position_self, dict)
 	local nodes = {}
