@@ -511,7 +511,7 @@ local function focus_node(self, lrgrav, rrgrav)
 	local abs_pos = vim.deepcopy(self.absolute_position)
 
 	-- find nodes on path from self to root.
-	local nodes_path = node_util.get_nodes_between(self.parent.snippet, abs_pos)
+	local nodes_path = node_util.get_nodes_between(self.parent.snippet, self)
 	-- nodes_on_path_to_self does not include the outer snippet, insert it here
 	-- (and also insert some dummy-value in abs_pos, such that abs_pos[i] the
 	-- position of node_path[i] in node_path[i-1] is).

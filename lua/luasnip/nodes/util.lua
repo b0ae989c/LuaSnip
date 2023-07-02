@@ -62,8 +62,18 @@ local function wrap_args(args)
 	end
 end
 
-local function get_nodes_between(parent, child_pos)
+local function get_nodes_between(parent, child)
 	local nodes = {}
+
+	-- special case for nodes without absolute_position (which is only
+	-- start_node).
+	if child.pos == -1 then
+		-- no nodes between, only child.
+		nodes[1] = child
+		return nodes
+	end
+
+	local child_pos = child.absolute_position
 
 	local indx = #parent.absolute_position + 1
 	local prev = parent
@@ -78,7 +88,7 @@ local function get_nodes_between(parent, child_pos)
 end
 
 local function leave_nodes_between(parent, child, no_move)
-	local nodes = get_nodes_between(parent, child.absolute_position)
+	local nodes = get_nodes_between(parent, child)
 	if #nodes == 0 then
 		return
 	end
@@ -95,7 +105,7 @@ local function leave_nodes_between(parent, child, no_move)
 end
 
 local function enter_nodes_between(parent, child, no_move)
-	local nodes = get_nodes_between(parent, child.absolute_position)
+	local nodes = get_nodes_between(parent, child)
 	if #nodes == 0 then
 		return
 	end
