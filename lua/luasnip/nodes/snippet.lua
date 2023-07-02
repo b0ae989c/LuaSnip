@@ -465,8 +465,10 @@ end
 
 function Snippet:remove_from_jumplist()
 	-- prev is i(-1)(startNode), prev of that is the outer/previous snippet.
+	-- pre is $0 or insertNode.
 	local pre = self.prev.prev
 	-- similar for next, self.next is the i(0).
+	-- nxt is snippet.
 	local nxt = self.next.next
 
 	self:exit()
@@ -480,35 +482,21 @@ function Snippet:remove_from_jumplist()
 	end
 	table.remove(sibling_list, self_indx)
 
-	-- basically four possibilities: only snippet, between two snippets,
-	-- inside an insertNode (start), inside an insertNode (end).
+	-- previous snippet jumps to this one => redirect to jump to next one.
 	if pre then
-		-- Snippet is linearly behind previous snip, the appropriate value
-		-- for nxt.prev is set later.
-		if pre.pos == 0 then
+		if pre.inner_first == self then
+			pre.inner_first = nxt
+		elseif pre.next == self then
 			pre.next = nxt
-		else
-			if nxt ~= pre then
-				-- if not the only snippet inside the insertNode:
-				pre.inner_first = nxt
-				nxt.prev = pre
-				return
-			else
-				pre.inner_first = nil
-				pre.inner_last = nil
-				pre.inner_active = false
-				return
-			end
 		end
 	end
 	if nxt then
-		if nxt.pos == -1 then
-			nxt.prev = pre
-		else
-			-- only possible if this is the last inside an insertNode, only
-			-- snippet in insertNode is handled above
+		if nxt.inner_last == self.next then
 			nxt.inner_last = pre
-			pre.next = nxt
+		-- careful here!! nxt.prev is its start_node, nxt.prev.prev is this
+		-- snippet.
+		elseif nxt.prev.prev == self.next then
+			nxt.prev.prev = pre
 		end
 	end
 end
