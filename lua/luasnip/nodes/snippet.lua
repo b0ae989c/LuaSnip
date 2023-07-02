@@ -440,6 +440,29 @@ local function ISN(pos, nodes, indent_text, opts)
 end
 extend_decorator.register(ISN, { arg_indx = 4 })
 
+-- returns: * the smallest known snippet this pos is inside.
+--          * the list of other snippets inside the snippet of this smallest
+--            node
+--          * the index this snippet would be at if inserted into that list
+local function find_snippettree_position(pos)
+	local prev_parent = nil
+	local prev_parent_children = session.snippet_roots[vim.api.nvim_get_current_buf()]
+
+	while true do
+		-- `false`: if pos is on the boundary of a snippet, consider it as
+		-- outside the snippet (in other words, prefer shifting the snippet to
+		-- continuing the search inside it.)
+		local found_parent, child_indx = node_util.binarysearch_pos(prev_parent_children, pos, false)
+		if not found_parent then
+			-- prev_parent is nil if this snippet is expanded at the top-level.
+			return prev_parent, prev_parent_children, child_indx
+		else
+			prev_parent = found_parent
+			prev_parent_children = prev_parent.child_snippets
+		end
+	end
+end
+
 function Snippet:remove_from_jumplist()
 	-- prev is i(-1)(startNode), prev of that is the outer/previous snippet.
 	local pre = self.prev.prev
@@ -447,6 +470,15 @@ function Snippet:remove_from_jumplist()
 	local nxt = self.next.next
 
 	self:exit()
+
+	local sibling_list = self.parent_node ~= nil and self.parent_node.parent.snippet.child_snippets or session.snippet_roots
+	local self_indx
+	for i, snip in ipairs(sibling_list) do
+		if snip == self then
+			self_indx = i
+		end
+	end
+	table.remove(sibling_list, self_indx)
 
 	-- basically four possibilities: only snippet, between two snippets,
 	-- inside an insertNode (start), inside an insertNode (end).
@@ -551,29 +583,6 @@ local function insert_into_jumplist(snippet, start_node, current_node, parent_no
 		end
 	end
 	table.insert(sibling_snippets, own_indx, snippet)
-end
-
--- returns: * the smallest known snippet this pos is inside.
---          * the list of other snippets inside the snippet of this smallest
---            node
---          * the index this snippet would be at if inserted into that list
-local function find_snippettree_position(pos)
-	local prev_parent = nil
-	local prev_parent_children = session.snippet_roots[vim.api.nvim_get_current_buf()]
-
-	while true do
-		-- `false`: if pos is on the boundary of a snippet, consider it as
-		-- outside the snippet (in other words, prefer shifting the snippet to
-		-- continuing the search inside it.)
-		local found_parent, child_indx = node_util.binarysearch_pos(prev_parent_children, pos, false)
-		if not found_parent then
-			-- prev_parent is nil if this snippet is expanded at the top-level.
-			return prev_parent, prev_parent_children, child_indx
-		else
-			prev_parent = found_parent
-			prev_parent_children = prev_parent.child_snippets
-		end
-	end
 end
 
 function Snippet:trigger_expand(current_node, pos_id, env)
