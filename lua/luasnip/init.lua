@@ -1,4 +1,7 @@
 local util = require("luasnip.util.util")
+local types = require("luasnip.util.types")
+local node_util = require("luasnip.nodes.util")
+
 local session = require("luasnip.session")
 local snippet_collection = require("luasnip.session.snippet_collection")
 local Environ = require("luasnip.util.environ")
@@ -160,7 +163,8 @@ local function unlink_current()
 	snippet:remove_from_jumplist()
 	-- prefer setting previous/outer insertNode as current node.
 	session.current_nodes[vim.api.nvim_get_current_buf()] = snippet.prev.prev
-		or snippet.next.next
+		-- use i(-1)
+		or snippet.next.prev
 end
 
 local function in_snippet()
@@ -590,10 +594,17 @@ local function unlink_current_if_deleted()
 
 		snippet:remove_from_jumplist()
 		session.current_nodes[vim.api.nvim_get_current_buf()] = snippet.prev.prev
-			or snippet.next.next
+			-- i(-1)
+			or snippet.next.prev
 	end
 end
 
+local function remove_snip_set_adjacent_as_current(snippet, reason, ...)
+	log.warn("Removing snippet %s: %s", snippet.trigger, reason, ...)
+	snippet:remove_from_jumplist()
+	session.current_nodes[vim.api.nvim_get_current_buf()] = snippet.prev.prev
+		or snippet.next.prev
+end
 local function exit_out_of_region(node)
 	-- if currently jumping via luasnip or no active node:
 	if session.jump_active or not node then
@@ -601,12 +612,17 @@ local function exit_out_of_region(node)
 	end
 
 	local pos = util.get_cursor_0ind()
-	local snippet = node.parent.snippet
+	local snippet
+	if node.type == types.snippet then
+		snippet = node
+	else
+		snippet = node.parent.snippet
+	end
 	local ok, snip_begin_pos, snip_end_pos =
 		pcall(snippet.mark.pos_begin_end, snippet.mark)
 
 	if not ok then
-		log.warn("Error while getting extmark-position: %s", snip_begin_pos)
+		remove_snip_set_adjacent_as_current(snippet, "Error while getting extmark-position: %s", snip_begin_pos)
 	end
 
 	-- stylua: ignore
@@ -615,26 +631,26 @@ local function exit_out_of_region(node)
 		pos[1] < snip_begin_pos[1] or
 		pos[1] > snip_end_pos[1] then
 
-		-- jump as long as the 0-node of the snippet hasn't been reached.
-		-- check for nil; if history is not set, the jump to snippet.next
-		-- returns nil.
-		while node and node ~= snippet.next do
-			-- set no_move.
-			ok, node = pcall(node.jump_from, node, 1, true)
-			if not ok then
-				log.warn("Error while jumping from node: %s", node)
-				snippet:remove_from_jumplist()
-				-- may be nil, checked later.
-				node = snippet.next
-				break
-			end
+		-- true: set no_move
+		local leave_ok, errmsg = pcall(node_util.leave_nodes_between, snippet, node, true)
+		if not leave_ok then
+			remove_snip_set_adjacent_as_current(snippet, "Error while leaving nodes: %s", errmsg)
 		end
-		session.current_nodes[vim.api.nvim_get_current_buf()] = node
+		-- leave_nodes_between does not leave snippet, have to do this
+		-- here.
+		snippet:input_leave(true)
+
+		local next_active = snippet.insert_nodes[0]
+		session.current_nodes[vim.api.nvim_get_current_buf()] = next_active
+		-- no_move again
+		next_active:input_enter(true)
 
 		-- also check next snippet.
-		if node and node.next then
-			if exit_out_of_region(node.next) then
-				node:input_leave(1, true)
+		if next_active.next then
+			-- pass any node inside the snippet.
+			if exit_out_of_region(next_active.next) then
+				-- also no_move.
+				node:input_leave(true)
 			end
 		end
 		return true
