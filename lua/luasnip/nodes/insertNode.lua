@@ -109,7 +109,7 @@ function ExitNode:jump_into(dir, no_move, dry_run)
 		end
 	else
 		-- if no next node, return self as next current node.
-		return InsertNode.jump_into(self, dir, no_move, dry_run) or self
+		return InsertNode.jump_into(self, dir, no_move, dry_run)
 	end
 end
 
@@ -211,7 +211,7 @@ function InsertNode:jump_from(dir, no_move, dry_run)
 		else
 			if self.next then
 				self:input_leave(no_move, dry_run)
-				return self.next:jump_into(dir, no_move, dry_run)
+				return self.next:jump_into(dir, no_move, dry_run) or self
 			else
 				-- only happens for exitNodes, but easier to include here
 				-- and reuse this impl for them.
@@ -225,7 +225,7 @@ function InsertNode:jump_from(dir, no_move, dry_run)
 		else
 			if self.prev then
 				self:input_leave(no_move, dry_run)
-				return self.prev:jump_into(dir, no_move, dry_run)
+				return self.prev:jump_into(dir, no_move, dry_run) or self
 			else
 				return self
 			end
