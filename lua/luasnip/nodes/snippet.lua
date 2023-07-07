@@ -519,7 +519,7 @@ local function insert_into_jumplist(snippet, start_node, current_node, parent_no
 	end
 
 	if parent_node then
-		local can_link_parent_node = vim.tbl_contains({types.insertNode, types.snippetNode}, rawget(parent_node, "type"))
+		local can_link_parent_node = vim.tbl_contains({types.insertNode, types.snippetNode, types.exitNode}, rawget(parent_node, "type"))
 		-- snippetNode (which has to be empty to be viable here) and
 		-- insertNode can both deal with inserting a snippet inside them
 		-- (ie. hooking it up st. it can be visited after jumping back to
