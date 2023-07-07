@@ -244,7 +244,7 @@ local function snip_expand(snippet, opts)
 		)
 	end
 
-	snip:trigger_expand(
+	local snip_parent_node = snip:trigger_expand(
 		session.current_nodes[vim.api.nvim_get_current_buf()],
 		pos_id,
 		env
@@ -253,18 +253,10 @@ local function snip_expand(snippet, opts)
 	local current_buf = vim.api.nvim_get_current_buf()
 
 	if session.current_nodes[current_buf] then
-		local current_node = session.current_nodes[current_buf]
-		if current_node.pos > 0 then
-			-- snippet is nested, notify current insertNode about expansion.
-			current_node.inner_active = true
-		else
-			-- snippet was expanded behind a previously active one, leave the i(0)
-			-- properly (and remove the snippet on error).
-			local ok, err = pcall(current_node.input_leave, current_node)
-			if not ok then
-				log.warn("Error while leaving snippet: ", err)
-				current_node.parent.snippet:remove_from_jumplist()
-			end
+		node_util.refocus(session.current_nodes[current_buf], snip_parent_node)
+
+		if snip_parent_node then
+			snip_parent_node:input_enter_children()
 		end
 	end
 

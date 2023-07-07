@@ -669,6 +669,8 @@ function Snippet:trigger_expand(current_node, pos_id, env)
 	self.parent_node = parent_node
 
 	insert_into_jumplist(self, start_node, current_node, parent_node, sibling_snippets, own_indx)
+
+	return parent_node
 end
 
 -- returns copy of snip if it matches, nil if not.

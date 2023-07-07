@@ -268,6 +268,180 @@ local function binarysearch_pos(nodes, pos, respect_rgravs)
 	end
 end
 
+-- a and b have to be in the same snippet, return their first (as seen from
+-- them) common parent.
+local function first_common_node(a, b)
+	local a_pos = a.absolute_position
+	local b_pos = b.absolute_position
+
+	-- last as seen from root.
+	local i = 0
+	local last_common = a.parent.snippet
+	-- invariant: last_common is parent of both a and b.
+	while (a_pos[i+1] ~= nil) and a_pos[i + 1] == b_pos[i + 1] do
+		last_common = last_common:resolve_position(a_pos[i + 1])
+		i = i + 1
+	end
+
+	return last_common
+end
+
+-- roots at depth 0, children of root at depth 1, their children at 2, ...
+local function snippettree_depth(snippet)
+	local depth = 0
+	while snippet.parent_node ~= nil do
+		snippet = snippet.parent_node.parent.snippet
+		depth = depth + 1
+	end
+	return depth
+end
+
+-- find the first common snippet a and b have on their respective unique paths
+-- to the snippet-roots.
+-- if no common ancestor exists (ie. a and b are roots of their buffers'
+-- forest, or just in different trees), return nil.
+-- in both cases, the paths themselves are returned as well.
+-- The common ancestor is included in the paths, except if there is none.
+-- Instead of storing the snippets in the paths, they are represented by the
+-- node which contains the next-lower snippet in the path (or `from`/`to`, if it's
+-- the first node of the path)
+-- This is a bit complicated, but this representation contains more information
+-- (or, more easily accessible information) than storing snippets: the
+-- immediate parent of the child along the path cannot be easily retrieved if
+-- the snippet is stored, but the snippet can be easily retrieved if the child
+-- is stored (.parent.snippet).
+-- And, so far this is pretty specific to refocus, and thus modeled so there is
+-- very little additional work in that method.
+-- At most one of a,b may be nil.
+local function first_common_snippet_ancestor_path(a, b)
+	local a_path = {}
+	local b_path = {}
+
+	-- general idea: we find the depth of a and b, walk upward with the deeper
+	-- one until we find its first ancestor with the same depth as the less
+	-- deep snippet, and then follow both paths until they arrive at the same
+	-- snippet (or at the root of their respective trees).
+	-- if either is nil, we treat it like it's one of the roots (the code will
+	-- behave correctly this way, and return an empty path for the nil-node,
+	-- and the correct path for the non-nil one).
+	local a_depth = a ~= nil and snippettree_depth(a) or 0
+	local b_depth = b ~= nil and snippettree_depth(b) or 0
+
+	-- bit subtle: both could be 0, but one could be nil.
+	-- deeper should not be nil! (this allows us to do the whole walk for the
+	-- non-nil node in the first for-loop, as opposed to needing some special
+	-- handling).
+	local deeper, deeper_path, other, other_path
+	if b == nil or (a ~= nil and a_depth < b_depth) then
+		deeper = a
+		other = b
+		deeper_path = a_path
+		other_path = b_path
+	else
+		-- we land here if `b ~= nil and (a == nil or a_depth >= b_depth)`, so
+		-- exactly what we want.
+		deeper = b
+		other = a
+		deeper_path = b_path
+		other_path = a_path
+	end
+
+	for _ = 1, math.abs(a_depth - b_depth) do
+		table.insert(deeper_path, deeper.parent_node)
+		deeper = deeper.parent_node.parent.snippet
+	end
+	-- here: deeper and other are at the same depth.
+	-- If we walk upwards one step at a time, they will meet at the same
+	-- parent, or hit their respective roots.
+
+	-- deeper can't be nil, if other is, we are done here and can return the
+	-- paths (and there is no shared node)
+	if other == nil then
+		return nil, a_path, b_path
+	end
+	-- beyond here, deeper and other are not nil.
+
+	while deeper ~= other do
+		if deeper.parent_node == nil then
+			-- deeper is at depth 0 => other as well => both are roots.
+			return nil, a_path, b_path
+		end
+
+		table.insert(deeper_path, deeper.parent_node)
+		table.insert(other_path, other.parent_node)
+
+		-- walk one step towards root.
+		deeper = deeper.parent_node.parent.snippet
+		other = other.parent_node.parent.snippet
+	end
+
+	-- either one will do here.
+	return deeper, a_path, b_path
+end
+
+-- removes focus from `from` and upwards up to the first common ancestor
+-- (node!) of `from` and `to`, and then focuses nodes between that f.c.a. and
+-- `to`.
+-- Requires that `from` is currently entered/focused.
+local function refocus(from, to)
+	if from == nil and to == nil then
+		-- absolutely nothing to do, should not happen.
+		return
+	end
+	-- pass nil if from/to is nil.
+	-- if either is nil, first_common_node is nil, and the corresponding list empty.
+	local first_common_snippet, from_snip_path, to_snip_path = first_common_snippet_ancestor_path(from and from.parent.snippet, to and to.parent.snippet)
+
+	-- we want leave/enter_path to be s.t. leaving/entering all nodes between
+	-- each entry and its snippet (and the snippet itself) will leave/enter all
+	-- nodes between the first common snippet (or the root-snippet) and
+	-- from/to.
+	-- Then, the nodes between the first common node and the respective
+	-- entrypoints (also nodes) into the first common snippet will have to be
+	-- left/entered, which is handled by final_leave_/first_enter_/common_node.
+
+	-- from, to are not yet in the paths.
+	table.insert(from_snip_path, 1, from)
+	table.insert(to_snip_path, 1, to)
+
+	-- determine how far to leave: if there is a common snippet, only up to the
+	-- first (from from/to) common node, otherwise leave the one snippet, and
+	-- enter the other completely.
+	local final_leave_node, first_enter_node, common_node
+	if first_common_snippet then
+		-- there is a common snippet => there is a common node => we have to
+		-- set final_leave_node, first_enter_node, and common_node.
+		final_leave_node = from_snip_path[#from_snip_path]
+		first_enter_node = to_snip_path[#to_snip_path]
+		common_node = first_common_node(first_enter_node, final_leave_node)
+
+		-- Also remove these last nodes from the lists, their snippet is not
+		-- supposed to be left entirely.
+		from_snip_path[#from_snip_path] = nil
+		to_snip_path[#to_snip_path] = nil
+	end
+
+	-- now do leave/enter, set no_move on all operations.
+	-- if one of from/to was nil, there are no leave/enter-operations done for
+	-- it (from/to_snip_path is {}, final_leave/first_enter_* is nil).
+	for _, node in ipairs(from_snip_path) do
+		leave_nodes_between(node.parent.snippet, node, true)
+		node.parent.snippet:input_leave(true)
+	end
+	if common_node and final_leave_node then
+		leave_nodes_between(common_node, final_leave_node, true)
+	end
+
+	if common_node and first_enter_node then
+		enter_nodes_between(common_node, first_enter_node, true)
+	end
+	for i = #to_snip_path, 1, -1 do
+		local node = to_snip_path[i]
+		node.parent.snippet:input_enter(true)
+		enter_nodes_between(node.parent.snippet, node, true)
+	end
+end
+
 return {
 	subsnip_init_children = subsnip_init_children,
 	init_child_positions_func = init_child_positions_func,
@@ -282,4 +456,5 @@ return {
 	init_node_opts = init_node_opts,
 	snippet_extend_context = snippet_extend_context,
 	binarysearch_pos = binarysearch_pos,
+	refocus = refocus,
 }
