@@ -485,14 +485,22 @@ function Snippet:remove_from_jumplist()
 	-- previous snippet jumps to this one => redirect to jump to next one.
 	if pre then
 		if pre.inner_first == self then
-			pre.inner_first = nxt
+			if pre == nxt then
+				pre.inner_first = nil
+			else
+				pre.inner_first = nxt
+			end
 		elseif pre.next == self then
 			pre.next = nxt
 		end
 	end
 	if nxt then
 		if nxt.inner_last == self.next then
-			nxt.inner_last = pre
+			if pre == nxt then
+				nxt.inner_last = nil
+			else
+				nxt.inner_last = pre
+			end
 		-- careful here!! nxt.prev is its start_node, nxt.prev.prev is this
 		-- snippet.
 		elseif nxt.prev.prev == self.next then
