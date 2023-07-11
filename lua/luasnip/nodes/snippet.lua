@@ -453,7 +453,13 @@ local function find_snippettree_position(pos)
 		-- outside the snippet (in other words, prefer shifting the snippet to
 		-- continuing the search inside it.)
 		local found_parent, child_indx = node_util.binarysearch_pos(prev_parent_children, pos, false)
-		if not found_parent then
+		if found_parent == false then
+			-- error while running procedure!
+			local bad_snippet = child_indx
+			bad_snippet:unlink_current()
+			-- continue again with same parent, but one less snippet in its
+			-- children => shouldn't cause endless loop.
+		elseif found_parent == nil then
 			-- prev_parent is nil if this snippet is expanded at the top-level.
 			return prev_parent, prev_parent_children, child_indx
 		else
@@ -584,9 +590,26 @@ end
 function Snippet:trigger_expand(current_node, pos_id, env)
 	local pos = vim.api.nvim_buf_get_extmark_by_id(0, session.ns_id, pos_id, {})
 
-	local parent_snippet, sibling_snippets, own_indx = find_snippettree_position(pos)
-	-- may be nil, ofc.
-	local parent_node = parent_snippet and parent_snippet:node_at(pos)
+	local parent_snippet, sibling_snippets, own_indx, parent_node
+	-- should not be an infinite loop (done in one iteration, in most cases, actually)
+	while true do
+		-- find snippettree-position.
+		parent_snippet, sibling_snippets, own_indx = find_snippettree_position(pos)
+		if parent_snippet then
+			local ok
+			-- if found, find node to insert at.
+			ok, parent_node = pcall(parent_snippet.node_at, parent_snippet, pos)
+			if ok then
+				break
+			else
+				-- error while finding node in snippet => remove snippet from jumplist and try again.
+				parent_snippet:remove_from_jumplist()
+			end
+		else
+			parent_node = nil
+			break
+		end
+	end
 
 	local pre_expand_res = self:event(events.pre_expand, { expand_pos = pos })
 		or {}

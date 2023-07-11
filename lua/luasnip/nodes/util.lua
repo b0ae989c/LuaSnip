@@ -235,7 +235,15 @@ local function binarysearch_pos(nodes, pos, respect_rgravs)
 	while true do
 		local mid = left + math.floor((right-left)/2)
 		local mid_mark = nodes[mid].mark
-		local mid_from, mid_to = mid_mark:pos_begin_end_raw()
+		local ok, mid_from, mid_to = pcall(mid_mark.pos_begin_end_raw, mid_mark)
+
+		if not ok then
+			-- error while running this procedure!
+			-- return false (because I don't know how to do this with `error`
+			-- and the offending node).
+			-- (returning data instead of a message in `error` seems weird..)
+			return false, mid
+		end
 
 		if respect_rgravs then
 			-- if rgrav is set on either endpoint, the node considers its
