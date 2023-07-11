@@ -86,7 +86,23 @@ local function available(snip_info)
 	return res
 end
 
-local function safe_jump(node, dir, no_move, dry_run)
+local function unlink_current()
+	local node = session.current_nodes[vim.api.nvim_get_current_buf()]
+	if not node then
+		print("No active Snippet")
+		return
+	end
+	local snippet = node.parent.snippet
+
+	-- prefer setting previous/outer insertNode as current node.
+	session.current_nodes[vim.api.nvim_get_current_buf()] =
+		-- either pick i0 of snippet before, or i(-1) of next snippet.
+		snippet.prev.prev or snippet:next_node()
+	snippet:remove_from_jumplist()
+end
+
+local function safe_jump_current(dir, no_move, dry_run)
+	local node = session.current_nodes[vim.api.nvim_get_current_buf()]
 	if not node then
 		return nil
 	end
@@ -98,43 +114,23 @@ local function safe_jump(node, dir, no_move, dry_run)
 		local snip = node.parent.snippet
 		log.warn("Removing snippet `%s` due to error %s", snip.trigger, res)
 
-		snip:remove_from_jumplist()
-		-- dir==1: try jumping into next snippet, then prev
-		-- dir==-1: try jumping into prev snippet, then next
-		if dir == 1 then
-			return safe_jump(
-				snip.next.next or snip.prev.prev,
-				snip.next.next and 1 or -1,
-				no_move,
-				dry_run
-			)
-		else
-			return safe_jump(
-				snip.prev.prev or snip.next.next,
-				snip.prev.prev and -1 or 1,
-				no_move,
-				dry_run
-			)
-		end
+		unlink_current()
+		return session.current_nodes[vim.api.nvim_get_current_buf()]
 	end
 end
 local function jump(dir)
 	local current = session.current_nodes[vim.api.nvim_get_current_buf()]
 	if current then
 		session.current_nodes[vim.api.nvim_get_current_buf()] =
-			util.no_region_check_wrap(safe_jump, current, dir)
+			util.no_region_check_wrap(safe_jump_current, dir)
 		return true
 	else
 		return false
 	end
 end
 local function jump_destination(dir)
-	local current = session.current_nodes[vim.api.nvim_get_current_buf()]
-	if current then
-		-- dry run of jump (+no_move ofc.), only retrieves destination-node.
-		return safe_jump(current, dir, true, { active = {} })
-	end
-	return nil
+	-- dry run of jump (+no_move ofc.), only retrieves destination-node.
+	return safe_jump_current(dir, true, { active = {} })
 end
 
 local function jumpable(dir)
@@ -150,21 +146,6 @@ end
 
 local function expand_or_jumpable()
 	return expandable() or jumpable(1)
-end
-
-local function unlink_current()
-	local node = session.current_nodes[vim.api.nvim_get_current_buf()]
-	if not node then
-		print("No active Snippet")
-		return
-	end
-	local snippet = node.parent.snippet
-
-	snippet:remove_from_jumplist()
-	-- prefer setting previous/outer insertNode as current node.
-	session.current_nodes[vim.api.nvim_get_current_buf()] = snippet.prev.prev
-		-- use i(-1)
-		or snippet.next.prev
 end
 
 local function in_snippet()
@@ -380,12 +361,10 @@ local function safe_choice_action(snip, ...)
 	else
 		log.warn("Removing snippet `%s` due to error %s", snip.trigger, res)
 
-		snip:remove_from_jumplist()
-		return safe_jump(
-			-- jump to next or previous snippet.
-			snip.next.next or snip.prev.prev,
-			snip.next.next and 1 or -1
-		)
+		-- not very elegant, but this way we don't have a near
+		-- re-implementation of unlink_current.
+		unlink_current()
+		return session.current_nodes[vim.api.nvim_get_current_buf()]
 	end
 end
 local function change_choice(val)
@@ -584,18 +563,20 @@ local function unlink_current_if_deleted()
 
 		log.info("Detected deletion of snippet `%s`, removing it", snippet.trigger)
 
+		session.current_nodes[vim.api.nvim_get_current_buf()] =
+			-- either pick i0 of snippet before, or i(-1) of next snippet.
+			snippet.prev.prev or snippet:next_node()
 		snippet:remove_from_jumplist()
-		session.current_nodes[vim.api.nvim_get_current_buf()] = snippet.prev.prev
-			-- i(-1)
-			or snippet.next.prev
 	end
 end
 
 local function remove_snip_set_adjacent_as_current(snippet, reason, ...)
 	log.warn("Removing snippet %s: %s", snippet.trigger, reason, ...)
+	-- first adjust current node, remove_from_jumplist will change next/prev!
+	session.current_nodes[vim.api.nvim_get_current_buf()] =
+		-- either pick i0 of snippet before, or i(-1) of next snippet.
+		snippet.prev.prev or snippet:next_node()
 	snippet:remove_from_jumplist()
-	session.current_nodes[vim.api.nvim_get_current_buf()] = snippet.prev.prev
-		or snippet.next.prev
 end
 local function exit_out_of_region(node)
 	-- if currently jumping via luasnip or no active node:
@@ -630,7 +611,10 @@ local function exit_out_of_region(node)
 		end
 		-- leave_nodes_between does not leave snippet, have to do this
 		-- here.
-		snippet:input_leave(true)
+		leave_ok, errmsg = pcall(snippet.input_leave, snippet, true)
+		if not leave_ok then
+			remove_snip_set_adjacent_as_current(snippet, "Error while leaving nodes: %s", errmsg)
+		end
 
 		local next_active = snippet.insert_nodes[0]
 		session.current_nodes[vim.api.nvim_get_current_buf()] = next_active

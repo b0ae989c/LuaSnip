@@ -1318,6 +1318,19 @@ function Snippet:node_at(pos)
 	return found_node:node_at(pos)
 end
 
+-- return the node the snippet jumps to, or nil if there isn't one.
+function Snippet:next_node()
+	-- self.next is $0, .next is either the surrounding node, or the next
+	-- snippet in the list, .prev is the i(-1) if the self.next.next is the
+	-- next snippet.
+
+	if self.parent_node and self.next.next == self.parent_node then
+		return self.next.next
+	else
+		return (self.next.next and self.next.next.prev)
+	end
+end
+
 return {
 	Snippet = Snippet,
 	S = S,
