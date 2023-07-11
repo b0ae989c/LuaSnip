@@ -87,6 +87,8 @@ local function get_nodes_between(parent, child)
 	return nodes
 end
 
+-- assumes that children of child are not even active.
+-- If they should also be left, do that separately.
 local function leave_nodes_between(parent, child, no_move)
 	local nodes = get_nodes_between(parent, child)
 	if #nodes == 0 then
@@ -424,21 +426,43 @@ local function refocus(from, to)
 	-- now do leave/enter, set no_move on all operations.
 	-- if one of from/to was nil, there are no leave/enter-operations done for
 	-- it (from/to_snip_path is {}, final_leave/first_enter_* is nil).
-	for _, node in ipairs(from_snip_path) do
+
+	-- leave_children on all from-nodes except the original from.
+	if #from_snip_path > 0 then
+		-- we know that the first node is from.
+		leave_nodes_between(from.parent.snippet, from, true)
+		from.parent.snippet:input_leave(true)
+	end
+	for i = 2, #from_snip_path do
+		local node = from_snip_path[i]
+		node:input_leave_children()
 		leave_nodes_between(node.parent.snippet, node, true)
 		node.parent.snippet:input_leave(true)
 	end
 	if common_node and final_leave_node then
+		common_node:input_leave_children()
 		leave_nodes_between(common_node, final_leave_node, true)
 	end
 
 	if common_node and first_enter_node then
 		enter_nodes_between(common_node, first_enter_node, true)
+		common_node:input_enter_children()
 	end
-	for i = #to_snip_path, 1, -1 do
+
+	-- same here, input_enter_children has to be called manually for the
+	-- to-nodes of the path we are entering (since enter_nodes_between does not
+	-- call it for the child-node).
+
+	for i = #to_snip_path, 2, -1 do
 		local node = to_snip_path[i]
 		node.parent.snippet:input_enter(true)
 		enter_nodes_between(node.parent.snippet, node, true)
+		node:input_enter_children()
+	end
+	if #to_snip_path > 0 then
+		-- we know that the first node is from.
+		enter_nodes_between(to.parent.snippet, to, true)
+		to.parent.snippet:input_enter(true)
 	end
 end
 
