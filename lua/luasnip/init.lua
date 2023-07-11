@@ -636,18 +636,7 @@ local function exit_out_of_region(node)
 		session.current_nodes[vim.api.nvim_get_current_buf()] = next_active
 		-- no_move again
 		next_active:input_enter(true)
-
-		-- also check next snippet.
-		if next_active.next then
-			-- pass any node inside the snippet.
-			if exit_out_of_region(next_active.next) then
-				-- also no_move.
-				node:input_leave(true)
-			end
-		end
-		return true
 	end
-	return false
 end
 
 -- ft string, extend_ft table of strings.
