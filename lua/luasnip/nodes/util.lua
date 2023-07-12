@@ -463,13 +463,13 @@ local function refocus(from, to)
 	-- this leave, and the following enters should be safe: the path to `to`
 	-- was verified via extmarks_valid.
 	if common_node and final_leave_node then
-		common_node:input_leave_children()
+		final_leave_node:input_leave_children()
 		leave_nodes_between(common_node, final_leave_node, true)
 	end
 
 	if common_node and first_enter_node then
 		enter_nodes_between(common_node, first_enter_node, true)
-		common_node:input_enter_children()
+		first_enter_node:input_enter_children()
 	end
 
 	-- same here, input_enter_children has to be called manually for the
