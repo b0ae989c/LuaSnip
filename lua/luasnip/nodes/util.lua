@@ -175,6 +175,11 @@ local function wrap_context(context)
 	end
 end
 
+local function linkable_node(node)
+	-- node.type has to be one of insertNode, snippetNode, exitNode.
+	return vim.tbl_contains({types.insertNode, types.snippetNode, types.exitNode}, rawget(node, "type"))
+end
+
 local cmp_functions = {
 	rgrav_less = function(pos, range_from)
 		return util.pos_cmp(pos, range_from) < 0
@@ -392,7 +397,8 @@ end
 -- removes focus from `from` and upwards up to the first common ancestor
 -- (node!) of `from` and `to`, and then focuses nodes between that f.c.a. and
 -- `to`.
--- Requires that `from` is currently entered/focused.
+-- Requires that `from` is currently entered/focused, and that no snippet
+-- between `to` and its root is invalid.
 local function refocus(from, to)
 	if from == nil and to == nil then
 		-- absolutely nothing to do, should not happen.
@@ -438,15 +444,24 @@ local function refocus(from, to)
 	-- leave_children on all from-nodes except the original from.
 	if #from_snip_path > 0 then
 		-- we know that the first node is from.
-		leave_nodes_between(from.parent.snippet, from, true)
-		from.parent.snippet:input_leave(true)
+		local ok1 = pcall(leave_nodes_between, from.parent.snippet, from, true)
+		local ok2 = pcall(from.parent.snippet.input_leave, from.parent.snippet, true)
+		if not ok1 or not ok2 then
+			from.parent.snippet:remove_from_jumplist()
+		end
 	end
 	for i = 2, #from_snip_path do
 		local node = from_snip_path[i]
-		node:input_leave_children()
-		leave_nodes_between(node.parent.snippet, node, true)
-		node.parent.snippet:input_leave(true)
+		local ok1 = pcall(node.input_leave_children, node)
+		local ok2 = pcall(leave_nodes_between, node.parent.snippet, node, true)
+		local ok3 = pcall(node.parent.snippet.input_leave, node.parent.snippet, true)
+		if not ok1 or not ok2 or not ok3 then
+			from.parent.snippet:remove_from_jumplist()
+		end
 	end
+
+	-- this leave, and the following enters should be safe: the path to `to`
+	-- was verified via extmarks_valid.
 	if common_node and final_leave_node then
 		common_node:input_leave_children()
 		leave_nodes_between(common_node, final_leave_node, true)
@@ -474,6 +489,19 @@ local function refocus(from, to)
 	end
 end
 
+local function generic_extmarks_valid(node, child)
+	-- valid if
+	-- - extmark-extents match.
+	-- - current choice is valid
+	local ok1, self_from, self_to = pcall(node.mark.pos_begin_end_raw, node.mark)
+	local ok2, child_from, child_to = pcall(child.mark.pos_begin_end_raw, child.mark)
+
+	if not ok1 or not ok2 or util.pos_cmp(self_from, child_from) ~= 0 or util.pos_cmp(self_to, child_to) ~= 0 then
+		return false
+	end
+	return child:extmarks_valid()
+end
+
 return {
 	subsnip_init_children = subsnip_init_children,
 	init_child_positions_func = init_child_positions_func,
@@ -487,6 +515,8 @@ return {
 	print_dict = print_dict,
 	init_node_opts = init_node_opts,
 	snippet_extend_context = snippet_extend_context,
+	linkable_node = linkable_node,
 	binarysearch_pos = binarysearch_pos,
 	refocus = refocus,
+	generic_extmarks_valid = generic_extmarks_valid
 }

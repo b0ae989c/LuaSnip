@@ -613,6 +613,10 @@ function Node:node_at(_)
 	return self
 end
 
+function Node:extmarks_valid()
+	return true
+end
+
 return {
 	Node = Node,
 	focus_node = focus_node,

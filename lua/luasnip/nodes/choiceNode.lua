@@ -422,6 +422,10 @@ function ChoiceNode:node_at(pos)
 	return self.active_choice:node_at(pos)
 end
 
+function ChoiceNode:extmarks_valid()
+	return node_util.generic_extmarks_valid(self, self.active_choice)
+end
+
 return {
 	C = C,
 }

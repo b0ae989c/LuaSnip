@@ -423,6 +423,10 @@ function DynamicNode:node_at(pos)
 	return self.snip:node_at(pos)
 end
 
+function DynamicNode:extmarks_valid()
+	return node_util.generic_extmarks_valid(self, self.snip)
+end
+
 return {
 	D = D,
 }

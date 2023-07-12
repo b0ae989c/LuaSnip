@@ -453,10 +453,13 @@ local function find_snippettree_position(pos)
 		-- outside the snippet (in other words, prefer shifting the snippet to
 		-- continuing the search inside it.)
 		local found_parent, child_indx = node_util.binarysearch_pos(prev_parent_children, pos, false)
-		if found_parent == false then
-			-- error while running procedure!
-			local bad_snippet = child_indx
-			bad_snippet:unlink_current()
+		if found_parent == false or (found_parent ~= nil and not found_parent:extmarks_valid()) then
+			-- error while running procedure, or found snippet damaged (the
+			-- idea to sidestep the damaged snippet, even if no error occurred
+			-- _right now_, is to ensure that we can input_enter all the nodes
+			-- along the insertion-path correctly).
+			local bad_snippet = prev_parent_children[child_indx]
+			bad_snippet:remove_from_jumplist()
 			-- continue again with same parent, but one less snippet in its
 			-- children => shouldn't cause endless loop.
 		elseif found_parent == nil then
@@ -479,7 +482,7 @@ function Snippet:remove_from_jumplist()
 
 	self:exit()
 
-	local sibling_list = self.parent_node ~= nil and self.parent_node.parent.snippet.child_snippets or session.snippet_roots
+	local sibling_list = self.parent_node ~= nil and self.parent_node.parent.snippet.child_snippets or session.snippet_roots[vim.api.nvim_get_current_buf()]
 	local self_indx
 	for i, snip in ipairs(sibling_list) do
 		if snip == self then
@@ -533,7 +536,7 @@ local function insert_into_jumplist(snippet, start_node, current_node, parent_no
 	end
 
 	if parent_node then
-		local can_link_parent_node = vim.tbl_contains({types.insertNode, types.snippetNode, types.exitNode}, rawget(parent_node, "type"))
+		local can_link_parent_node = node_util.linkable_node(parent_node)
 		-- snippetNode (which has to be empty to be viable here) and
 		-- insertNode can both deal with inserting a snippet inside them
 		-- (ie. hooking it up st. it can be visited after jumping back to
@@ -1352,6 +1355,36 @@ function Snippet:next_node()
 	else
 		return (self.next.next and self.next.next.prev)
 	end
+end
+
+function Snippet:extmarks_valid()
+	-- assumption: extmarks are contiguous, and all can be queried via pos_begin_end_raw.
+	local ok, current_from, self_to = pcall(self.mark.pos_begin_end_raw, self.mark)
+	if not ok then
+		return false
+	end
+
+	-- below code does not work correctly if the snippet(Node) does not have any children.
+	if #self.nodes == 0 then
+		return true
+	end
+
+	for _, node in ipairs(self.nodes) do
+		local ok_, node_from, node_to = pcall(node.mark.pos_begin_end_raw, node.mark)
+		-- this snippet is invalid if:
+		-- - we can't get the position of some node
+		-- - the positions aren't contiguous or don't completely fill the parent, or
+		-- - any child of this node violates these rules.
+		if not ok_ or util.pos_cmp(current_from, node_from) ~= 0 or not node:extmarks_valid() then
+			return false
+		end
+		current_from = node_to
+	end
+	if util.pos_cmp(current_from, self_to) ~= 0 then
+		return false
+	end
+
+	return true
 end
 
 return {
