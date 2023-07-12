@@ -342,7 +342,7 @@ local function first_common_snippet_ancestor_path(a, b)
 	-- non-nil node in the first for-loop, as opposed to needing some special
 	-- handling).
 	local deeper, deeper_path, other, other_path
-	if b == nil or (a ~= nil and a_depth < b_depth) then
+	if b == nil or (a ~= nil and a_depth > b_depth) then
 		deeper = a
 		other = b
 		deeper_path = a_path
