@@ -571,7 +571,7 @@ local function unlink_current_if_deleted()
 end
 
 local function remove_snip_set_adjacent_as_current(snippet, reason, ...)
-	log.warn("Removing snippet %s: %s", snippet.trigger, reason, ...)
+	log.warn("Removing snippet %s: %s", snippet.trigger, reason:format(...))
 	-- first adjust current node, remove_from_jumplist will change next/prev!
 	session.current_nodes[vim.api.nvim_get_current_buf()] =
 		-- either pick i0 of snippet before, or i(-1) of next snippet.
