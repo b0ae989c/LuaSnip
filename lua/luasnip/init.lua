@@ -245,6 +245,18 @@ local function snip_expand(snippet, opts)
 	session.current_nodes[vim.api.nvim_get_current_buf()] =
 		opts.jump_into_func(snip)
 
+	local buf_snippet_roots = session.snippet_roots[vim.api.nvim_get_current_buf()]
+	if not session.config.history and #buf_snippet_roots > 1 then
+		-- if history is not set, and there is more than one snippet-root,
+		-- remove the other one.
+		-- The nice thing is: since we maintain that #buf_snippet_roots == 1
+		-- whenever outside of this function, we know that if we're here, it's
+		-- because this snippet was just inserted into buf_snippet_roots.
+		-- Armed with this knowledge, we can just check which of the roots is
+		-- this snippet, and remove the other one.
+		buf_snippet_roots[buf_snippet_roots[1] == snip and 2 or 1]:remove_from_jumplist()
+	end
+
 	-- stores original snippet, it doesn't contain any data from expansion.
 	session.last_expand_snip = snippet
 	session.last_expand_opts = opts

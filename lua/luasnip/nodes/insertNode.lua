@@ -95,24 +95,6 @@ function ExitNode:input_leave(no_move, dry_run)
 	end
 end
 
-function ExitNode:jump_into(dir, no_move, dry_run)
-	if not session.config.history then
-		self:input_enter(no_move, dry_run)
-		if (dir == 1 and not self.next) or (dir == -1 and not self.prev) then
-			if self.pos == 0 then
-				-- leave instantly, self won't be active snippet.
-				self:input_leave(no_move, dry_run)
-			end
-			return nil
-		else
-			return self
-		end
-	else
-		-- if no next node, return self as next current node.
-		return InsertNode.jump_into(self, dir, no_move, dry_run)
-	end
-end
-
 function ExitNode:_update_dependents() end
 function ExitNode:update_dependents() end
 function ExitNode:update_all_dependents() end
