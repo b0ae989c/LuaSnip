@@ -594,24 +594,11 @@ function Snippet:trigger_expand(current_node, pos_id, env)
 	local pos = vim.api.nvim_buf_get_extmark_by_id(0, session.ns_id, pos_id, {})
 
 	local parent_snippet, sibling_snippets, own_indx, parent_node
-	-- should not be an infinite loop (done in one iteration, in most cases, actually)
-	while true do
-		-- find snippettree-position.
-		parent_snippet, sibling_snippets, own_indx = find_snippettree_position(pos)
-		if parent_snippet then
-			local ok
-			-- if found, find node to insert at.
-			ok, parent_node = pcall(parent_snippet.node_at, parent_snippet, pos)
-			if ok then
-				break
-			else
-				-- error while finding node in snippet => remove snippet from jumplist and try again.
-				parent_snippet:remove_from_jumplist()
-			end
-		else
-			parent_node = nil
-			break
-		end
+	-- find snippettree-position.
+	parent_snippet, sibling_snippets, own_indx = find_snippettree_position(pos)
+	if parent_snippet then
+		-- if found, find node to insert at.
+		parent_node = parent_snippet:node_at(pos)
 	end
 
 	local pre_expand_res = self:event(events.pre_expand, { expand_pos = pos })
