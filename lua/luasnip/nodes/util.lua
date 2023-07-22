@@ -468,6 +468,16 @@ local function refocus(from, to)
 	end
 
 	if common_node and first_enter_node then
+		-- In general we assume that common_node is active when we are here.
+		-- This may not be the case if we are currently inside the i(0) or
+		-- i(-1), since the snippet might be the common node and in this case,
+		-- it is inactive.
+		-- This means that, if we want to enter a non-exitNode, we have to
+		-- explicitly activate the snippet for all jumps to behave correctly.
+		-- (if we enter a i(0)/i(-1), this is not necessary, of course).
+		if final_leave_node.type == types.exitNode and first_enter_node.type ~= types.exitNode then
+			common_node:input_enter()
+		end
 		enter_nodes_between(common_node, first_enter_node, true)
 		first_enter_node:input_enter_children()
 	end
