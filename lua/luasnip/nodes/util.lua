@@ -478,6 +478,10 @@ local function refocus(from, to)
 		if final_leave_node.type == types.exitNode and first_enter_node.type ~= types.exitNode then
 			common_node:input_enter()
 		end
+		-- symmetrically, entering an i(0)/i(-1) requires leaving the snippet.
+		if final_leave_node.type ~= types.exitNode and first_enter_node.type == types.exitNode then
+			common_node:input_leave()
+		end
 		enter_nodes_between(common_node, first_enter_node, true)
 		first_enter_node:input_enter_children()
 	end
