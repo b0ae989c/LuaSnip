@@ -231,16 +231,6 @@ local function snip_expand(snippet, opts)
 		env
 	)
 
-	local current_buf = vim.api.nvim_get_current_buf()
-
-	if session.current_nodes[current_buf] then
-		node_util.refocus(session.current_nodes[current_buf], snip_parent_node)
-
-		if snip_parent_node then
-			snip_parent_node:input_enter_children()
-		end
-	end
-
 	-- jump_into-callback returns new active node.
 	session.current_nodes[vim.api.nvim_get_current_buf()] =
 		opts.jump_into_func(snip)

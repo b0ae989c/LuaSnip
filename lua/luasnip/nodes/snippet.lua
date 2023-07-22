@@ -640,6 +640,11 @@ function Snippet:trigger_expand(current_node, pos_id, env)
 			end
 		end
 	end
+	if current_node then
+		node_util.refocus(current_node, parent_node)
+		if parent_node then
+			parent_node:input_enter_children()
+		end
 	end
 
 	local pre_expand_res = self:event(events.pre_expand, { expand_pos = pos })
