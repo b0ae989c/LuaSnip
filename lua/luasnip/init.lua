@@ -235,7 +235,8 @@ local function snip_expand(snippet, opts)
 	session.current_nodes[vim.api.nvim_get_current_buf()] =
 		opts.jump_into_func(snip)
 
-	local buf_snippet_roots = session.snippet_roots[vim.api.nvim_get_current_buf()]
+	local buf_snippet_roots =
+		session.snippet_roots[vim.api.nvim_get_current_buf()]
 	if not session.config.history and #buf_snippet_roots > 1 then
 		-- if history is not set, and there is more than one snippet-root,
 		-- remove the other one.
@@ -597,7 +598,11 @@ local function exit_out_of_region(node)
 		pcall(snippet.mark.pos_begin_end, snippet.mark)
 
 	if not ok then
-		remove_snip_set_adjacent_as_current(snippet, "Error while getting extmark-position: %s", snip_begin_pos)
+		remove_snip_set_adjacent_as_current(
+			snippet,
+			"Error while getting extmark-position: %s",
+			snip_begin_pos
+		)
 	end
 
 	-- stylua: ignore

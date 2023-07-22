@@ -101,7 +101,7 @@ local function leave_nodes_between(parent, child, no_move)
 		-- entirely (because we stop at nodes[2], and handle nodes[1]
 		-- separately)
 		nodes[i]:input_leave(no_move)
-		nodes[i-1]:input_leave_children()
+		nodes[i - 1]:input_leave_children()
 	end
 	nodes[1]:input_leave(no_move)
 end
@@ -112,7 +112,7 @@ local function enter_nodes_between(parent, child, no_move)
 		return
 	end
 
-	for i = 1, #nodes-1 do
+	for i = 1, #nodes - 1 do
 		-- only enter children for nodes before the last (lowest) one.
 		nodes[i]:input_enter(no_move)
 		nodes[i]:input_enter_children()
@@ -177,7 +177,10 @@ end
 
 local function linkable_node(node)
 	-- node.type has to be one of insertNode, snippetNode, exitNode.
-	return vim.tbl_contains({types.insertNode, types.snippetNode, types.exitNode}, rawget(node, "type"))
+	return vim.tbl_contains(
+		{ types.insertNode, types.snippetNode, types.exitNode },
+		rawget(node, "type")
+	)
 end
 
 local cmp_functions = {
@@ -192,7 +195,7 @@ local cmp_functions = {
 	end,
 	boundary_outside_greater = function(pos, range_to)
 		return util.pos_cmp(pos, range_to) >= 0
-	end
+	end,
 }
 -- `nodes` is a list of nodes ordered by their occurrence in the buffer.
 -- `pos` is a row-column-tuble, byte-columns, and we return the node the LEFT
@@ -210,7 +213,7 @@ local cmp_functions = {
 -- * if it is false, pos has to be fully inside a node to be considered inside
 --   it. If pos is on the left endpoint, it is considered to be left of the
 --   node, and likewise for the right endpoint.
--- 
+--
 -- This differentiation is useful for making this function more general:
 -- When searching in the contiguous nodes of a snippet, we'd like this routine
 -- to return any of them (obviously the one pos is inside/or on the border of),
@@ -238,7 +241,7 @@ local function binarysearch_pos(nodes, pos, respect_rgravs)
 		return nil, 1
 	end
 	while true do
-		local mid = left + math.floor((right-left)/2)
+		local mid = left + math.floor((right - left) / 2)
 		local mid_mark = nodes[mid].mark
 		local ok, mid_from, mid_to = pcall(mid_mark.pos_begin_end_raw, mid_mark)
 
@@ -293,7 +296,7 @@ local function first_common_node(a, b)
 	local i = 0
 	local last_common = a.parent.snippet
 	-- invariant: last_common is parent of both a and b.
-	while (a_pos[i+1] ~= nil) and a_pos[i + 1] == b_pos[i + 1] do
+	while (a_pos[i + 1] ~= nil) and a_pos[i + 1] == b_pos[i + 1] do
 		last_common = last_common:resolve_position(a_pos[i + 1])
 		i = i + 1
 	end
@@ -406,7 +409,11 @@ local function refocus(from, to)
 	end
 	-- pass nil if from/to is nil.
 	-- if either is nil, first_common_node is nil, and the corresponding list empty.
-	local first_common_snippet, from_snip_path, to_snip_path = first_common_snippet_ancestor_path(from and from.parent.snippet, to and to.parent.snippet)
+	local first_common_snippet, from_snip_path, to_snip_path =
+		first_common_snippet_ancestor_path(
+			from and from.parent.snippet,
+			to and to.parent.snippet
+		)
 
 	-- we want leave/enter_path to be s.t. leaving/entering all nodes between
 	-- each entry and its snippet (and the snippet itself) will leave/enter all
@@ -445,7 +452,8 @@ local function refocus(from, to)
 	if #from_snip_path > 0 then
 		-- we know that the first node is from.
 		local ok1 = pcall(leave_nodes_between, from.parent.snippet, from, true)
-		local ok2 = pcall(from.parent.snippet.input_leave, from.parent.snippet, true)
+		local ok2 =
+			pcall(from.parent.snippet.input_leave, from.parent.snippet, true)
 		if not ok1 or not ok2 then
 			from.parent.snippet:remove_from_jumplist()
 		end
@@ -454,7 +462,8 @@ local function refocus(from, to)
 		local node = from_snip_path[i]
 		local ok1 = pcall(node.input_leave_children, node)
 		local ok2 = pcall(leave_nodes_between, node.parent.snippet, node, true)
-		local ok3 = pcall(node.parent.snippet.input_leave, node.parent.snippet, true)
+		local ok3 =
+			pcall(node.parent.snippet.input_leave, node.parent.snippet, true)
 		if not ok1 or not ok2 or not ok3 then
 			from.parent.snippet:remove_from_jumplist()
 		end
@@ -475,11 +484,17 @@ local function refocus(from, to)
 		-- This means that, if we want to enter a non-exitNode, we have to
 		-- explicitly activate the snippet for all jumps to behave correctly.
 		-- (if we enter a i(0)/i(-1), this is not necessary, of course).
-		if final_leave_node.type == types.exitNode and first_enter_node.type ~= types.exitNode then
+		if
+			final_leave_node.type == types.exitNode
+			and first_enter_node.type ~= types.exitNode
+		then
 			common_node:input_enter()
 		end
 		-- symmetrically, entering an i(0)/i(-1) requires leaving the snippet.
-		if final_leave_node.type ~= types.exitNode and first_enter_node.type == types.exitNode then
+		if
+			final_leave_node.type ~= types.exitNode
+			and first_enter_node.type == types.exitNode
+		then
 			common_node:input_leave()
 		end
 		enter_nodes_between(common_node, first_enter_node, true)
@@ -507,10 +522,17 @@ local function generic_extmarks_valid(node, child)
 	-- valid if
 	-- - extmark-extents match.
 	-- - current choice is valid
-	local ok1, self_from, self_to = pcall(node.mark.pos_begin_end_raw, node.mark)
-	local ok2, child_from, child_to = pcall(child.mark.pos_begin_end_raw, child.mark)
+	local ok1, self_from, self_to =
+		pcall(node.mark.pos_begin_end_raw, node.mark)
+	local ok2, child_from, child_to =
+		pcall(child.mark.pos_begin_end_raw, child.mark)
 
-	if not ok1 or not ok2 or util.pos_cmp(self_from, child_from) ~= 0 or util.pos_cmp(self_to, child_to) ~= 0 then
+	if
+		not ok1
+		or not ok2
+		or util.pos_cmp(self_from, child_from) ~= 0
+		or util.pos_cmp(self_to, child_to) ~= 0
+	then
 		return false
 	end
 	return child:extmarks_valid()
@@ -532,5 +554,5 @@ return {
 	linkable_node = linkable_node,
 	binarysearch_pos = binarysearch_pos,
 	refocus = refocus,
-	generic_extmarks_valid = generic_extmarks_valid
+	generic_extmarks_valid = generic_extmarks_valid,
 }

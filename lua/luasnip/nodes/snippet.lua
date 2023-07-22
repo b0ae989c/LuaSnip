@@ -319,7 +319,7 @@ local function _S(snip, nodes, opts)
 
 			-- list of snippets expanded within the region of this snippet.
 			-- sorted by their buffer-position, for quick searching.
-			child_snippets = {}
+			child_snippets = {},
 		}),
 		opts
 	)
@@ -446,14 +446,19 @@ extend_decorator.register(ISN, { arg_indx = 4 })
 --          * the index this snippet would be at if inserted into that list
 local function find_snippettree_position(pos)
 	local prev_parent = nil
-	local prev_parent_children = session.snippet_roots[vim.api.nvim_get_current_buf()]
+	local prev_parent_children =
+		session.snippet_roots[vim.api.nvim_get_current_buf()]
 
 	while true do
 		-- `false`: if pos is on the boundary of a snippet, consider it as
 		-- outside the snippet (in other words, prefer shifting the snippet to
 		-- continuing the search inside it.)
-		local found_parent, child_indx = node_util.binarysearch_pos(prev_parent_children, pos, false)
-		if found_parent == false or (found_parent ~= nil and not found_parent:extmarks_valid()) then
+		local found_parent, child_indx =
+			node_util.binarysearch_pos(prev_parent_children, pos, false)
+		if
+			found_parent == false
+			or (found_parent ~= nil and not found_parent:extmarks_valid())
+		then
 			-- error while running procedure, or found snippet damaged (the
 			-- idea to sidestep the damaged snippet, even if no error occurred
 			-- _right now_, is to ensure that we can input_enter all the nodes
@@ -482,7 +487,9 @@ function Snippet:remove_from_jumplist()
 
 	self:exit()
 
-	local sibling_list = self.parent_node ~= nil and self.parent_node.parent.snippet.child_snippets or session.snippet_roots[vim.api.nvim_get_current_buf()]
+	local sibling_list = self.parent_node ~= nil
+			and self.parent_node.parent.snippet.child_snippets
+		or session.snippet_roots[vim.api.nvim_get_current_buf()]
 	local self_indx
 	for i, snip in ipairs(sibling_list) do
 		if snip == self then
@@ -518,8 +525,15 @@ function Snippet:remove_from_jumplist()
 	end
 end
 
-local function insert_into_jumplist(snippet, start_node, current_node, parent_node, sibling_snippets, own_indx)
-	local prev_snippet = sibling_snippets[own_indx-1]
+local function insert_into_jumplist(
+	snippet,
+	start_node,
+	current_node,
+	parent_node,
+	sibling_snippets,
+	own_indx
+)
+	local prev_snippet = sibling_snippets[own_indx - 1]
 	-- have not yet inserted self!!
 	local next_snippet = sibling_snippets[own_indx]
 
@@ -626,13 +640,27 @@ function Snippet:trigger_expand(current_node, pos_id, env)
 		-- insertNode.
 		-- Still, any node-type is preferable to textNode and functionNode,
 		-- both of which cannot handle snippets inserted into them.
-		while parent_node and (parent_node.type == types.textNode or parent_node.type == types.functionNode) do
+		while
+			parent_node
+			and (
+				parent_node.type == types.textNode
+				or parent_node.type == types.functionNode
+			)
+		do
 			-- if the snippet is expanded at a text or functionNode, check if
 			-- there is an adjacent insert/exitNode we could instead look into.
 			local from, to = parent_node.mark:pos_begin_end_raw()
-			local alt_node_indx = util.pos_equal(from, pos) and parent_node.indx-1 or (util.pos_equal(to, pos) and parent_node.indx+1 or -1)
+			local alt_node_indx = util.pos_equal(from, pos)
+					and parent_node.indx - 1
+				or (util.pos_equal(to, pos) and parent_node.indx + 1 or -1)
 			local alt_node = parent_node.parent.nodes[alt_node_indx]
-			if alt_node and (alt_node.type ~= types.textNode and alt_node.type ~= types.functionNode) then
+			if
+				alt_node
+				and (
+					alt_node.type ~= types.textNode
+					and alt_node.type ~= types.functionNode
+				)
+			then
 				-- continue search in alternative node.
 				parent_node = alt_node:node_at(pos)
 			else
@@ -735,7 +763,14 @@ function Snippet:trigger_expand(current_node, pos_id, env)
 	-- parent_node is nil if the snippet is toplevel.
 	self.parent_node = parent_node
 
-	insert_into_jumplist(self, start_node, current_node, parent_node, sibling_snippets, own_indx)
+	insert_into_jumplist(
+		self,
+		start_node,
+		current_node,
+		parent_node,
+		sibling_snippets,
+		own_indx
+	)
 
 	return parent_node
 end
@@ -1365,10 +1400,16 @@ end
 -- pos-column has to be a byte-index, not a display-column.
 function Snippet:smallest_node_at(pos)
 	local self_from, self_to = self.mark:pos_begin_end_raw()
-	assert(util.pos_cmp(self_from, pos) <= 0 and util.pos_cmp(pos, self_to) <= 0, "pos is not inside the snippet.")
+	assert(
+		util.pos_cmp(self_from, pos) <= 0 and util.pos_cmp(pos, self_to) <= 0,
+		"pos is not inside the snippet."
+	)
 
 	local smallest_node = self:node_at(pos)
-	assert(smallest_node ~= nil, "could not find a smallest node (very unexpected)")
+	assert(
+		smallest_node ~= nil,
+		"could not find a smallest node (very unexpected)"
+	)
 
 	return smallest_node
 end
@@ -1401,7 +1442,8 @@ end
 
 function Snippet:extmarks_valid()
 	-- assumption: extmarks are contiguous, and all can be queried via pos_begin_end_raw.
-	local ok, current_from, self_to = pcall(self.mark.pos_begin_end_raw, self.mark)
+	local ok, current_from, self_to =
+		pcall(self.mark.pos_begin_end_raw, self.mark)
 	if not ok then
 		return false
 	end
@@ -1412,12 +1454,17 @@ function Snippet:extmarks_valid()
 	end
 
 	for _, node in ipairs(self.nodes) do
-		local ok_, node_from, node_to = pcall(node.mark.pos_begin_end_raw, node.mark)
+		local ok_, node_from, node_to =
+			pcall(node.mark.pos_begin_end_raw, node.mark)
 		-- this snippet is invalid if:
 		-- - we can't get the position of some node
 		-- - the positions aren't contiguous or don't completely fill the parent, or
 		-- - any child of this node violates these rules.
-		if not ok_ or util.pos_cmp(current_from, node_from) ~= 0 or not node:extmarks_valid() then
+		if
+			not ok_
+			or util.pos_cmp(current_from, node_from) ~= 0
+			or not node:extmarks_valid()
+		then
 			return false
 		end
 		current_from = node_to
